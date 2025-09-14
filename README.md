@@ -11,6 +11,7 @@
 - ทั้งหมดต้องรันบน Docker (ไม่ต้องเตรียมเครื่องล่วงหน้า)
 - ไม่ใช้ mock ใดๆ ต้องเชื่อมต่อกับ OpenAI จริง (ต้องมีคีย์)
 - ถ้าโค้ดยาวใกล้ 500 บรรทัดจะแยกเป็นไฟล์/โมดูลย่อยให้เหมาะสม
+ - เพิ่มโหมดจำลอง LINE: มี endpoint `POST /webhooks/line` และหน้า UI "LINE Simulator" เพื่อส่ง payload เลียนแบบ LINE event โดยไม่ต้องเชื่อมต่อ LINE จริงในช่วงพัฒนา
 
 ## โครงสร้างโปรเจ็ค
 ```
@@ -69,6 +70,40 @@ docker compose up --build
 ```json
 {"reply": "...ข้อความจาก AI..."}
 ```
+
+## โหมดจำลอง LINE (Webhook Simulation)
+- Endpoint: `POST /webhooks/line`
+- ตัวอย่าง payload ที่ส่งจาก UI หรือผ่าน curl:
+```json
+{
+  "events": [
+    {
+      "type": "message",
+      "replyToken": "SIMULATED",
+      "source": {"type": "user", "userId": "UdevUser"},
+      "message": {"type": "text", "text": "สวัสดี"}
+    }
+  ]
+}
+```
+- การตอบกลับ (จำลองสิ่งที่จะไปเรียก LINE Reply API) จะมีฟิลด์ `replies` พร้อม `messages` ที่เป็นข้อความจาก AI:
+```json
+{
+  "replies": [
+    {
+      "to": "UdevUser",
+      "replyToken": "SIMULATED",
+      "messages": [
+        {"type": "text", "text": "...ข้อความจาก AI..."}
+      ]
+    }
+  ]
+}
+```
+
+### การใช้งานผ่าน UI
+- เปิดหน้าเว็บ `http://localhost:5173` เลือกแท็บ "LINE Simulator"
+- ใส่ `userId` และพิมพ์ข้อความแล้วกด Send ระบบจะส่ง payload ไปที่ `POST /webhooks/line` และแสดงทั้ง payload และ response ทางขวา
 
 ## หมายเหตุเรื่องโมเดล
 - โค้ดตั้งค่าเริ่มต้นเป็น `gpt-5` ผ่าน env `OPENAI_MODEL` คุณสามารถปรับได้ใน `.env` หรือส่ง `model` มากับ body ได้

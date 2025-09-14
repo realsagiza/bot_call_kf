@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-from openai import OpenAI
+from typing import Any, Dict, List
+
+from app.services.openai_client import chat_completion
 
 
 class ChatRequest(BaseModel):
@@ -32,28 +34,69 @@ def create_app() -> FastAPI:
 
     @app.post("/api/chat", response_model=ChatResponse)
     async def chat(req: ChatRequest):
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
+        content = chat_completion(
+            messages=req.messages,
+            model=req.model,
+            temperature=req.temperature,
+        )
+        return ChatResponse(reply=content)
 
-        model = req.model or os.getenv("OPENAI_MODEL", "gpt-5")
+    # --- LINE-like webhook simulation ---
+    @app.post("/webhooks/line")
+    async def line_webhook(payload: Dict[str, Any]):
+        # Expected minimal shape:
+        # {
+        #   "events": [
+        #     {
+        #       "type": "message",
+        #       "message": {"type": "text", "text": "Hello"},
+        #       "replyToken": "...",
+        #       "source": {"type": "user", "userId": "Uxxx"}
+        #     }
+        #   ]
+        # }
+        events: List[Dict[str, Any]] = payload.get("events") or []
+        if not isinstance(events, list) or len(events) == 0:
+            raise HTTPException(status_code=400, detail="Invalid payload: missing events[]")
 
-        try:
-            client = OpenAI(api_key=api_key)
-            params: dict = {
-                "model": model,
-                "messages": req.messages,
-            }
-            # Some models (e.g., gpt-5) do not support overriding temperature.
-            if not str(model).startswith("gpt-5"):
-                if req.temperature is not None and req.temperature != 1:
-                    params["temperature"] = req.temperature
+        replies: List[Dict[str, Any]] = []
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            if event.get("type") != "message":
+                continue
+            message = event.get("message") or {}
+            if message.get("type") != "text":
+                continue
+            user_text = str(message.get("text") or "").strip()
+            if not user_text:
+                continue
 
-            completion = client.chat.completions.create(**params)
-            content = completion.choices[0].message.content
-            return ChatResponse(reply=content)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            user_id = (
+                ((event.get("source") or {}).get("userId"))
+                or "anonymous"
+            )
+
+            ai_reply = chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant for a LINE user."},
+                    {"role": "user", "content": user_text},
+                ]
+            )
+
+            replies.append({
+                "to": user_id,
+                "replyToken": event.get("replyToken") or "SIMULATED",
+                "messages": [
+                    {"type": "text", "text": ai_reply}
+                ],
+            })
+
+        if not replies:
+            raise HTTPException(status_code=400, detail="No valid text message events to process")
+
+        # In real LINE integration, we'd call LINE Reply API here. In dev, return the would-be payload.
+        return {"replies": replies}
 
     return app
 
