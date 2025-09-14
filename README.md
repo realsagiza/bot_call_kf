@@ -13,6 +13,21 @@
 - ถ้าโค้ดยาวใกล้ 500 บรรทัดจะแยกเป็นไฟล์/โมดูลย่อยให้เหมาะสม
  - เพิ่มโหมดจำลอง LINE: มี endpoint `POST /webhooks/line` และหน้า UI "LINE Simulator" เพื่อส่ง payload เลียนแบบ LINE event โดยไม่ต้องเชื่อมต่อ LINE จริงในช่วงพัฒนา
 
+### เพิ่ม Agent: `sale`
+- มีตัวเลือก Agent ที่ชื่อว่า `sale` สำหรับบทบาทผู้ช่วยงานขาย (Sales Assistant)
+- พฤติกรรม: คัดกรองลูกค้า ถามเพื่อเข้าใจความต้องการ แนะนำสินค้า/บริการพร้อมประโยชน์/ราคา (ถ้ามีข้อมูล) รับมือข้อโต้แย้ง และปิดด้วย next step ที่ชัดเจน (ทดลองใช้/นัดเดโม/สั่งซื้อ)
+- สไตล์คำตอบ: กระชับ เป็นข้อๆ ชัดเจน มุ่งเน้นการตัดสินใจ
+- วิธีใช้งาน:
+  - API: ส่งฟิลด์ `agent: "sale"` ไปที่ `POST /api/chat`
+  - UI Chat: เลือก Agent จาก dropdown (`Default`/`Sale`)
+  - LINE Simulator: เลือก Agent จาก dropdown และระบบจะส่งไปพร้อม payload
+
+### Sessions (ความต่อเนื่องของบทสนทนา)
+- ระบบมี session ในหน่วยความจำหลังบ้าน (in-memory) เพื่อเก็บประวัติสนทนาล่าสุดแบบย่อ (ตัดความยาวอัตโนมัติ)
+- ฝั่ง Chat UI จะสร้าง `sessionId` อัตโนมัติและส่งไปที่ `POST /api/chat` ทุกครั้ง เพื่อให้ AI คุยต่อเนื่องได้ (ค่าเริ่มต้น Agent คือ `sale`)
+- ฝั่ง LINE Simulator จะใช้ `userId` เป็น session โดยอัตโนมัติ
+- หมายเหตุ: เป็น in-memory เหมาะสำหรับ dev/test. หากต้องการ production ให้ย้ายไปใช้ Redis/ฐานข้อมูล
+
 ## โครงสร้างโปรเจ็ค
 ```
 .
@@ -63,7 +78,8 @@ docker compose up --build
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello"}
   ],
-  "temperature": 0.7
+  "temperature": 0.7,
+  "agent": "sale"
 }
 ```
 - ผลลัพธ์:
@@ -103,7 +119,7 @@ docker compose up --build
 
 ### การใช้งานผ่าน UI
 - เปิดหน้าเว็บ `http://localhost:5173` เลือกแท็บ "LINE Simulator"
-- ใส่ `userId` และพิมพ์ข้อความแล้วกด Send ระบบจะส่ง payload ไปที่ `POST /webhooks/line` และแสดงทั้ง payload และ response ทางขวา
+- ใส่ `userId`, เลือก `Agent` และพิมพ์ข้อความแล้วกด Send ระบบจะส่ง payload ไปที่ `POST /webhooks/line` และแสดงทั้ง payload และ response ทางขวา
 
 ## หมายเหตุเรื่องโมเดล
 - โค้ดตั้งค่าเริ่มต้นเป็น `gpt-5` ผ่าน env `OPENAI_MODEL` คุณสามารถปรับได้ใน `.env` หรือส่ง `model` มากับ body ได้

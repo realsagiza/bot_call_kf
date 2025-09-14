@@ -8,6 +8,7 @@ export default function LineSimulator() {
   const [text, setText] = useState('Hello from LINE dev!')
   const [eventsLog, setEventsLog] = useState([])
   const [loading, setLoading] = useState(false)
+  const [agent, setAgent] = useState('sale')
   const viewportRef = useRef(null)
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function LineSimulator() {
           }
         ]
       }
-      const res = await axios.post(`${BACKEND_URL}/webhooks/line`, payload)
+      const res = await axios.post(`${BACKEND_URL}/webhooks/line`, { ...payload, agent })
       setEventsLog(curr => [
         ...curr,
         { dir: 'out', body: payload },
@@ -55,6 +56,13 @@ export default function LineSimulator() {
           placeholder="userId"
           style={{ width: 220, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db' }}
         />
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#374151' }}>
+          Agent
+          <select value={agent} onChange={e => setAgent(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+            <option value="default">Default</option>
+            <option value="sale">Sale</option>
+          </select>
+        </label>
         <input
           value={text}
           onChange={e => setText(e.target.value)}

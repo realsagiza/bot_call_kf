@@ -9,6 +9,18 @@ export default function Chat() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [agent, setAgent] = useState('sale')
+  const [sessionId, setSessionId] = useState(() => {
+    try {
+      const existing = localStorage.getItem('chat_session_id')
+      if (existing) return existing
+      const gen = `web:${Math.random().toString(36).slice(2)}${Date.now()}`
+      localStorage.setItem('chat_session_id', gen)
+      return gen
+    } catch {
+      return `web:${Date.now()}`
+    }
+  })
   const viewportRef = useRef(null)
 
   const displayMessages = useMemo(
@@ -32,6 +44,8 @@ export default function Chat() {
     try {
       const res = await axios.post(`${BACKEND_URL}/api/chat`, {
         messages: next,
+        agent,
+        sessionId,
       })
       const reply = res.data.reply
       setMessages(curr => [...curr, { role: 'assistant', content: reply }])
@@ -49,7 +63,16 @@ export default function Chat() {
       fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'
     }}>
       <header style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
-        <strong>Chatbot</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <strong>Chatbot</strong>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#374151' }}>
+            Agent
+            <select value={agent} onChange={e => setAgent(e.target.value)} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+              <option value="default">Default</option>
+              <option value="sale">Sale</option>
+            </select>
+          </label>
+        </div>
       </header>
       <main ref={viewportRef} style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#fafafa' }}>
         {displayMessages.length === 0 && (

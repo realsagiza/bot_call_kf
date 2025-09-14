@@ -5,12 +5,16 @@ import os
 from typing import Any, Dict, List
 
 from app.services.openai_client import chat_completion
+from app.services.agent import apply_agent_to_messages
+from app.services.session_store import SESSION_STORE
 
 
 class ChatRequest(BaseModel):
     messages: list[dict]
     model: str | None = None
     temperature: float | None = None
+    agent: str | None = None
+    sessionId: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -34,11 +38,34 @@ def create_app() -> FastAPI:
 
     @app.post("/api/chat", response_model=ChatResponse)
     async def chat(req: ChatRequest):
-        content = chat_completion(
-            messages=req.messages,
-            model=req.model,
-            temperature=req.temperature,
-        )
+        # If a sessionId is provided and the last message from client is user text,
+        # use the session store to maintain continuity. Otherwise, fall back to stateless.
+        if req.sessionId:
+            # Extract last user text from incoming messages, else ignore
+            last_user_text = None
+            for m in reversed(req.messages or []):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    last_user_text = str(m.get("content") or "").strip()
+                    if last_user_text:
+                        break
+            if last_user_text:
+                content = SESSION_STORE.generate_reply(
+                    session_id=req.sessionId,
+                    user_text=last_user_text,
+                    agent=req.agent,
+                    model=req.model,
+                    temperature=req.temperature,
+                )
+            else:
+                # no latest user message; just return empty reply
+                content = ""
+        else:
+            resolved_messages = apply_agent_to_messages(req.messages, req.agent)
+            content = chat_completion(
+                messages=resolved_messages,
+                model=req.model,
+                temperature=req.temperature,
+            )
         return ChatResponse(reply=content)
 
     # --- LINE-like webhook simulation ---
@@ -77,11 +104,12 @@ def create_app() -> FastAPI:
                 or "anonymous"
             )
 
-            ai_reply = chat_completion(
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant for a LINE user."},
-                    {"role": "user", "content": user_text},
-                ]
+            agent = payload.get("agent") if isinstance(payload, dict) else None
+            # Use user_id as session id for LINE-like chats
+            ai_reply = SESSION_STORE.generate_reply(
+                session_id=f"line:{user_id}",
+                user_text=user_text,
+                agent=agent,
             )
 
             replies.append({
